@@ -1,0 +1,26 @@
+{
+  "easy": [
+    {
+      "name": "adam",
+      "score": 41,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "adam",
+      "score": 30,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "vojta",
+      "score": 13,
+      "date": "2026-10-14"
+    }
+  ],
+  "hard": [
+    {
+      "name": "adam",
+      "score": 18,
+      "date": "2026-10-14"
+    }
+  ]
+}
