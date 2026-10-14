@@ -26,6 +26,7 @@ MAX_FALL_SPEED = 700.0
 FLAP_STRENGTH = -420.0
 FLAP_COOLDOWN = 0.15
 PIPE_FOLLOW_SMOOTHING = 0.12
+PIPE_HARD_Y_RANDOM = 140.0
 PINCH_RATIO = 0.5
 FIST_CURLED_FINGERS = 3
 
@@ -48,6 +49,31 @@ GAME_OVER_INPUT_DELAY = 0.5
 
 CAMERA_DIM_MENU = 160
 CAMERA_DIM_PLAY = 120
+
+_PKG_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
+ASSETS_DIR = _PKG_ASSETS_DIR if _PKG_ASSETS_DIR.is_dir() else Path.cwd() / "assets"
+
+SOUND_ENABLED = True
+SOUND_VOLUME = 0.5
+SFX_FLAP = "flap.mp3"
+SFX_POINT = "point.mp3"
+SFX_DIE = "die-sfx.mp3"
+
+INTRO_SHEET = "close_fist_bw.png"
+INTRO_COLS = 8
+INTRO_ROWS = 7
+INTRO_FRAME_W = 202
+INTRO_FRAME_H = 200
+INTRO_FPS = 25
+INTRO_MIN_SECONDS = 2.0
+
+_PKG_MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
+MODELS_DIR = _PKG_MODELS_DIR if _PKG_MODELS_DIR.is_dir() else Path.cwd() / "models"
+
+TTS_ENABLED = True
+TTS_VOICE = "cs_CZ-jirka-medium.onnx"
+TTS_MODEL_PATH = MODELS_DIR / TTS_VOICE
+TTS_CONFIG_PATH = MODELS_DIR / (TTS_VOICE + ".json")
 
 LEADERBOARD_PATH = Path.cwd() / "leaderboard.json"
 HAND_LANDMARKER_PATH = Path.cwd() / "hand_landmarker.task"

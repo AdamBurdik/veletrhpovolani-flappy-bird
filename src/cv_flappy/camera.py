@@ -11,6 +11,7 @@ class Camera:
         if self.cap.isOpened():
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         self.ok = self.cap.isOpened()
 
     def read(self) -> np.ndarray | None:

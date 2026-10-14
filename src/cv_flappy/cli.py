@@ -10,20 +10,33 @@ from .config import (
     FLAP_COOLDOWN,
     FPS,
     GAME_OVER_INPUT_DELAY,
+    INTRO_FPS,
+    INTRO_MIN_SECONDS,
     MAX_NAME_LENGTH,
     MENU_SELECT_FRAMES,
     WINDOW_TITLE,
 )
 from .game import FlappyGame
 from .hand_tracker import HandTracker
+from .sound import SoundManager
+from .tts import Speech
 from .ui import PHASE_BOARD, PHASE_ENTRY
 
 MENU = "menu"
+INTRO = "intro"
 COUNTDOWN = "countdown"
 PLAYING = "playing"
 GAME_OVER = "game_over"
 
 WINDOWRESIZED = getattr(pygame, "WINDOWRESIZED", -1)
+
+
+def _flap_pressed(gesture: str | None, prev_gesture: str | None) -> bool:
+    if gesture == "fist":
+        return prev_gesture != "fist"
+    if gesture == "pinch":
+        return prev_gesture is None
+    return False
 
 
 def main() -> None:
@@ -38,12 +51,15 @@ def main() -> None:
     camera = Camera()
     tracker = HandTracker()
     game = FlappyGame()
+    sfx = SoundManager()
+    voice = Speech()
 
     state = MENU
     phase = PHASE_ENTRY
     selected = "easy"
     hand_frames = 0
     countdown_left = COUNTDOWN_SECONDS
+    intro_t = 0.0
     name_buffer = ""
     cursor_timer = 0.0
     input_delay = 0.0
@@ -74,11 +90,15 @@ def main() -> None:
             else:
                 hand_y, gesture = hand_state
             flap = False
-            menu_confirm = False
-            if gesture is not None and prev_gesture is None and flap_cooldown <= 0:
+            pressed = _flap_pressed(gesture, prev_gesture)
+            if flap_cooldown <= 0 and pressed:
                 flap_cooldown = FLAP_COOLDOWN
                 flap = True
-                menu_confirm = gesture == "fist"
+                if state == PLAYING and selected == "hard":
+                    sfx.play("flap")
+            fist_pressed = gesture == "fist" and prev_gesture != "fist"
+            pinch_pressed = gesture == "pinch" and prev_gesture != "pinch"
+            confirm = fist_pressed or pinch_pressed
             prev_gesture = gesture
 
             for event in pygame.event.get():
@@ -122,7 +142,7 @@ def main() -> None:
                     if state == GAME_OVER and phase == PHASE_ENTRY:
                         phase = PHASE_BOARD
                         saved = False
-                    elif state == PLAYING or state == COUNTDOWN:
+                    elif state == PLAYING or state == COUNTDOWN or state == INTRO:
                         state = MENU
                         hand_frames = 0
                     else:
@@ -136,6 +156,14 @@ def main() -> None:
 
                 elif state == MENU and event.key == pygame.K_SPACE:
                     game = FlappyGame(selected)
+                    intro_t = 0.0
+                    state = INTRO
+
+                elif (
+                    state == INTRO
+                    and intro_t >= INTRO_MIN_SECONDS
+                    and event.key in (pygame.K_SPACE, pygame.K_RETURN)
+                ):
                     countdown_left = COUNTDOWN_SECONDS
                     state = COUNTDOWN
 
@@ -146,13 +174,14 @@ def main() -> None:
                 ):
                     if event.key == pygame.K_BACKSPACE:
                         name_buffer = name_buffer[:-1]
-                    elif event.key == pygame.K_RETURN:
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                         name = name_buffer.strip()
                         if name:
                             entries[selected] = leaderboard.save(
                                 name, game.score, selected
                             )
                             saved = True
+                            voice.say(name)
                         else:
                             saved = False
                         phase = PHASE_BOARD
@@ -162,7 +191,7 @@ def main() -> None:
                     and phase == PHASE_BOARD
                     and input_delay <= 0
                 ):
-                    if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                         state = MENU
                         phase = PHASE_ENTRY
                         name_buffer = ""
@@ -174,8 +203,17 @@ def main() -> None:
                     selected = "easy" if hand_y < 0.5 else "hard"
                 else:
                     hand_frames = 0
-                if hand_frames >= MENU_SELECT_FRAMES and menu_confirm:
+                if hand_frames >= MENU_SELECT_FRAMES and confirm:
                     game = FlappyGame(selected)
+                    intro_t = 0.0
+                    state = INTRO
+
+            elif state == INTRO:
+                intro_t += dt
+                start_gesture = (
+                    fist_pressed if game.difficulty == "hard" else pinch_pressed
+                )
+                if intro_t >= INTRO_MIN_SECONDS and start_gesture:
                     countdown_left = COUNTDOWN_SECONDS
                     state = COUNTDOWN
 
@@ -185,12 +223,28 @@ def main() -> None:
                     state = PLAYING
 
             elif state == PLAYING:
+                prev_score = game.score
+                was_alive = game.alive
                 game.update(dt, hand_y, flap)
-                if not game.alive:
+                if game.score > prev_score:
+                    sfx.play("point")
+                if was_alive and not game.alive:
+                    sfx.play("die")
                     state = GAME_OVER
                     phase = PHASE_ENTRY
                     name_buffer = ""
                     input_delay = GAME_OVER_INPUT_DELAY
+
+            elif (
+                state == GAME_OVER
+                and phase == PHASE_BOARD
+                and input_delay <= 0
+                and confirm
+            ):
+                state = MENU
+                phase = PHASE_ENTRY
+                name_buffer = ""
+                hand_frames = 0
 
             screen = pygame.display.get_surface()
             layout = ui.compute_layout(*screen.get_size())
@@ -199,7 +253,17 @@ def main() -> None:
                 ui.draw_menu(screen, camera.ok, selected, layout, frame)
             else:
                 ui.draw_playfield(screen, game, layout, elapsed, frame)
-                if state == COUNTDOWN:
+                if state == INTRO:
+                    ui.draw_intro(
+                        screen,
+                        game.difficulty,
+                        int(intro_t * INTRO_FPS),
+                        layout,
+                        hand_y is not None,
+                        elapsed,
+                        ready=intro_t >= INTRO_MIN_SECONDS,
+                    )
+                elif state == COUNTDOWN:
                     ui.draw_countdown(screen, max(1, math.ceil(countdown_left)), layout)
                 elif state == GAME_OVER:
                     ui.draw_game_over(

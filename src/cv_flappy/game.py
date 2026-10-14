@@ -17,6 +17,7 @@ from .config import (
     PIPE_SPEED_MAX,
     PIPE_SPACING,
     PIPE_WIDTH,
+    PIPE_HARD_Y_RANDOM,
     PLAYFIELD_MAP_MARGIN,
     VIRTUAL_PLAYFIELD_H,
     VIRTUAL_PLAYFIELD_W,
@@ -40,6 +41,7 @@ class Pipe:
     x: float
     gap_y: float
     scored: bool = False
+    follow_offset: float = 0.0
 
     @property
     def gap_top(self) -> float:
@@ -102,7 +104,9 @@ class FlappyGame:
         for pipe in self.pipes:
             pipe.x -= self.pipe_speed * dt
             if target_gap is not None:
-                pipe.gap_y += (target_gap - pipe.gap_y) * PIPE_FOLLOW_SMOOTHING
+                desired = target_gap + pipe.follow_offset
+                desired = max(GAP_MIN, min(GAP_MAX, desired))
+                pipe.gap_y += (desired - pipe.gap_y) * PIPE_FOLLOW_SMOOTHING
                 pipe.gap_y = max(GAP_MIN, min(GAP_MAX, pipe.gap_y))
             if not pipe.scored and pipe.x + PIPE_WIDTH < bird.x - bird.radius:
                 pipe.scored = True
@@ -113,8 +117,13 @@ class FlappyGame:
 
     def _spawn_pipe(self, x: float | None = None) -> None:
         gap_y = random.uniform(GAP_MIN, GAP_MAX)
+        follow_offset = (
+            random.uniform(-PIPE_HARD_Y_RANDOM, PIPE_HARD_Y_RANDOM)
+            if self.difficulty == "hard"
+            else 0.0
+        )
         self.pipes.append(
-            Pipe(x if x is not None else float(VIRTUAL_PLAYFIELD_W), gap_y)
+            Pipe(x if x is not None else float(VIRTUAL_PLAYFIELD_W), gap_y, follow_offset=follow_offset)
         )
 
     def _collides(self) -> bool:

@@ -5,6 +5,7 @@ import pygame
 
 from .camera import frame_to_surface
 from .config import (
+    ASSETS_DIR,
     BG_DARK,
     BLACK,
     BOX_BG,
@@ -23,6 +24,11 @@ from .config import (
     GRASS,
     GREEN,
     INPUT_BOX,
+    INTRO_COLS,
+    INTRO_FRAME_H,
+    INTRO_FRAME_W,
+    INTRO_ROWS,
+    INTRO_SHEET,
     LB_MAX_W,
     LB_MIN_W,
     LB_W_FRAC,
@@ -55,6 +61,7 @@ PHASE_BOARD = "board"
 _font_cache: dict[int, pygame.font.Font] = {}
 _sky_cache: dict[tuple[int, int], pygame.Surface] = {}
 _dim_cache: dict[tuple[int, int, int], pygame.Surface] = {}
+_intro_frames_cache: list[pygame.Surface] | None = None
 
 CLOUDS = [
     (0.10, 90, 14.0, 1.0),
@@ -144,6 +151,29 @@ def _dim(w: int, h: int, alpha: int) -> pygame.Surface:
         surface.fill((0, 0, 0, alpha))
         _dim_cache[key] = surface
     return _dim_cache[key]
+
+
+def _intro_frames() -> list[pygame.Surface]:
+    global _intro_frames_cache
+    if _intro_frames_cache is not None:
+        return _intro_frames_cache
+    _intro_frames_cache = []
+    path = ASSETS_DIR / INTRO_SHEET
+    if path.is_file():
+        try:
+            sheet = pygame.image.load(str(path)).convert_alpha()
+        except pygame.error:
+            sheet = None
+        if sheet is not None:
+            for index in range(INTRO_COLS * INTRO_ROWS):
+                rect = pygame.Rect(
+                    (index % INTRO_COLS) * INTRO_FRAME_W,
+                    (index // INTRO_COLS) * INTRO_FRAME_H,
+                    INTRO_FRAME_W,
+                    INTRO_FRAME_H,
+                )
+                _intro_frames_cache.append(sheet.subsurface(rect).copy())
+    return _intro_frames_cache
 
 
 def draw_camera_background(
@@ -348,7 +378,7 @@ def draw_menu_prompt(
     y = rect.bottom + 34
     if camera_ok:
         if hand_frames > 0:
-            draw_text(surface, "Close fist to start", 22, (rect.left, y), GREEN)
+            draw_text(surface, "Close fist or pinch to start", 22, (rect.left, y), GREEN)
         else:
             draw_text(surface, "Show your hand", 22, (rect.left, y), WHITE)
     else:
@@ -488,12 +518,111 @@ def draw_menu(
             (pf.centerx, pf.centery + 90), RED, align="center", shadow=True,
         )
     draw_text(
-        surface, "Hover hand over a mode to choose, close fist to start", 22,
+        surface, "Hover hand over a mode to choose, close fist / pinch to start", 22,
         (pf.centerx, pf.bottom - 96), WHITE, align="center", shadow=True,
     )
     draw_text(
         surface, "1 / 2 = difficulty (keyboard)", 20,
         (pf.centerx, pf.bottom - 64), GRAY, align="center",
+    )
+
+
+def draw_intro(
+    surface: pygame.Surface,
+    difficulty: str,
+    frame_index: int,
+    layout: Layout,
+    hand_ok: bool,
+    elapsed: float,
+    ready: bool = True,
+) -> None:
+    pf, s = layout.pf_rect, layout.scale
+    overlay = pygame.Surface(pf.size, pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 150))
+    surface.blit(overlay, pf)
+
+    is_hard = difficulty == "hard"
+    draw_text(
+        surface, "HARD MODE" if is_hard else "EASY MODE", 44,
+        (pf.centerx, pf.top + int(pf.height * 0.15)),
+        GOLD if is_hard else GREEN, align="center", shadow=True,
+    )
+
+    center_y = pf.top + int(pf.height * 0.46)
+    size = (max(1, int(INTRO_FRAME_W * s)), max(1, int(INTRO_FRAME_H * s)))
+    frames = _intro_frames()
+    if frames:
+        if is_hard:
+            frame = frames[frame_index % len(frames)]
+            image_y = center_y
+        else:
+            frame = frames[0]
+            image_y = center_y + int(math.sin(elapsed * 2.4) * pf.height * 0.10)
+        image = pygame.transform.smoothscale(frame, size)
+        surface.blit(image, image.get_rect(center=(pf.centerx, image_y)))
+        if not is_hard:
+            _draw_move_arrow(surface, layout, size, center_y)
+    else:
+        draw_text(
+            surface, "Close fist" if is_hard else "Move hand", 40,
+            (pf.centerx, center_y), WHITE, align="center", shadow=True,
+        )
+
+    instruction_y = pf.top + int(pf.height * 0.76)
+    draw_text(
+        surface,
+        "Close fist to flap" if is_hard else "Move your hand up / down",
+        32,
+        (pf.centerx, instruction_y),
+        WHITE,
+        align="center",
+        shadow=True,
+    )
+    if hand_ok:
+        blink = int(elapsed * 2) % 2 == 0
+        if not ready:
+            color = GRAY
+        else:
+            color = GREEN if blink else WHITE
+        draw_text(
+            surface, "Close fist to start" if is_hard else "Pinch to start", 26,
+            (pf.centerx, instruction_y + 44), color,
+            align="center", shadow=True,
+        )
+    else:
+        draw_text(
+            surface,
+            "Show your hand, then close a fist" if is_hard else "Show your hand, then pinch",
+            26,
+            (pf.centerx, instruction_y + 44), RED, align="center", shadow=True,
+        )
+    draw_text(
+        surface, "SPACE / ENTER = start", 22, (pf.centerx, pf.bottom - 38),
+        GRAY, align="center",
+    )
+
+
+def _draw_move_arrow(
+    surface: pygame.Surface,
+    layout: Layout,
+    image_size: tuple[int, int],
+    center_y: int,
+) -> None:
+    pf, s = layout.pf_rect, layout.scale
+    amp = pf.height * 0.10
+    x = pf.centerx + image_size[0] // 2 + max(12, int(28 * s))
+    top = center_y - int(amp)
+    bottom = center_y + int(amp)
+    color = GREEN
+    pygame.draw.line(surface, color, (x, top), (x, bottom), max(2, int(3 * s)))
+    head = max(6, int(12 * s))
+    pygame.draw.polygon(
+        surface, color,
+        [(x, top - head), (x - head // 2, top + head // 2), (x + head // 2, top + head // 2)],
+    )
+    pygame.draw.polygon(
+        surface, color,
+        [(x, bottom + head), (x - head // 2, bottom - head // 2), (x + head // 2, bottom - head // 2)],
     )
 
 
@@ -556,5 +685,5 @@ def draw_game_over(
         color = GOLD if saved else GRAY
         draw_text(surface, message, 30, (box.centerx, box.top + 200), color,
                   align="center")
-        draw_text(surface, "ENTER = back to menu", 22,
+        draw_text(surface, "ENTER / pinch = back to menu", 22,
                   (box.centerx, box.top + 320), GRAY, align="center")

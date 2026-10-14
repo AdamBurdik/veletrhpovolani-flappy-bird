@@ -2,6 +2,11 @@
   "easy": [
     {
       "name": "adam",
+      "score": 93,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "adam",
       "score": 41,
       "date": "2026-10-14"
     },
@@ -14,12 +19,117 @@
       "name": "vojta",
       "score": 13,
       "date": "2026-10-14"
+    },
+    {
+      "name": "adam",
+      "score": 6,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "test",
+      "score": 4,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "test",
+      "score": 2,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "adam",
+      "score": 1,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "pepa",
+      "score": 1,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "adam",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "test",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "dam",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "adam",
+      "score": 0,
+      "date": "2026-10-14"
     }
   ],
   "hard": [
     {
       "name": "adam",
+      "score": 21,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "adam",
       "score": 18,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "adam",
+      "score": 10,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "pepa",
+      "score": 3,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "Adam",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "Adam",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "Adam",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "Adam",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "Adam",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "Adam",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "pepa",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "Adam",
+      "score": 0,
+      "date": "2026-10-14"
+    },
+    {
+      "name": "Adam",
+      "score": 0,
       "date": "2026-10-14"
     }
   ]
