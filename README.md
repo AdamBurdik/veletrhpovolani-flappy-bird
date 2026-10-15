@@ -9,7 +9,7 @@ your score is saved to a local JSON leaderboard.
 
 ## Licence
 
-The **source code** is licensed under the [MIT License](LICENCE).
+The **source code** is licensed under the [MIT Licence](LICENCE).
 
 This covers the code only:
 
