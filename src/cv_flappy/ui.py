@@ -575,7 +575,7 @@ def draw_menu(
     if camera_ok and option_rect is not None:
         draw_pinch_hint(
             surface,
-            (option_rect.right + int(pf.width * 0.06), option_rect.centery),
+            (option_rect.right + int(pf.width * 0.14), option_rect.centery),
             layout.scale,
             elapsed,
         )
