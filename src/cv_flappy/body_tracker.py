@@ -14,6 +14,7 @@ from .config import (
     POSE_DETECTION_CONFIDENCE,
     POSE_LANDMARKER_PATH,
     POSE_LANDMARKER_URL,
+    POSE_NUM_POSES,
     POSE_PRESENCE_CONFIDENCE,
     POSE_TRACKING_CONFIDENCE,
     SQUAT_HEAD_GAP_MIN_RATIO,
@@ -74,12 +75,38 @@ class BodyState:
     too_close: bool
     too_far: bool
     bending: bool
+    line_y: float = 0.0
     landmarks: list[tuple[float, float]] = field(default_factory=list)
     visibility: list[float] = field(default_factory=list)
 
 
 def _mid_y(a, b) -> float:
     return (a.y + b.y) / 2.0
+
+
+def _pose_extent(pose) -> float:
+    """Bounding-box area of the visible landmarks (larger = closer)."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for point in pose:
+        if float(point.visibility) >= SQUAT_MIN_LANDMARK_VISIBILITY:
+            xs.append(point.x)
+            ys.append(point.y)
+    if len(xs) < 4:
+        return 0.0
+    return (max(xs) - min(xs)) * (max(ys) - min(ys))
+
+
+def _select_pose(poses):
+    """Pick the largest (closest) skeleton when several people are in frame."""
+    best = None
+    best_extent = -1.0
+    for pose in poses:
+        extent = _pose_extent(pose)
+        if extent > best_extent:
+            best_extent = extent
+            best = pose
+    return best if best_extent > 0.0 else (poses[0] if poses else None)
 
 
 class BodyTracker:
@@ -100,7 +127,7 @@ class BodyTracker:
         options = vision.PoseLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=str(model_path)),
             running_mode=vision.RunningMode.VIDEO,
-            num_poses=1,
+            num_poses=POSE_NUM_POSES,
             min_pose_detection_confidence=POSE_DETECTION_CONFIDENCE,
             min_pose_presence_confidence=POSE_PRESENCE_CONFIDENCE,
             min_tracking_confidence=POSE_TRACKING_CONFIDENCE,
@@ -138,7 +165,10 @@ class BodyTracker:
             self._smoothed_y = None
             return None
 
-        pose = result.pose_landmarks[0]
+        pose = _select_pose(result.pose_landmarks)
+        if pose is None:
+            self._smoothed_y = None
+            return None
         landmarks = [(pose[i].x, pose[i].y) for i in BODY_INDICES]
         visibility = [float(pose[i].visibility) for i in BODY_INDICES]
 
@@ -182,6 +212,7 @@ class BodyTracker:
             too_close=too_close,
             too_far=too_far,
             bending=bending,
+            line_y=shoulder_mid_y,
             landmarks=landmarks,
             visibility=visibility,
         )

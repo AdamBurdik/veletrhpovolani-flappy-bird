@@ -394,7 +394,7 @@ def draw_camera_panel(
         )
         if squat:
             if body is not None:
-                line_y = rect.top + int(body.body_y * rect.height)
+                line_y = rect.top + int(body.line_y * rect.height)
                 pygame.draw.line(
                     surface, SQUAT_COLOR, (rect.left, line_y), (rect.right, line_y), 2
                 )
