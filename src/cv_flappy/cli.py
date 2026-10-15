@@ -135,7 +135,7 @@ def main() -> None:
                 hand_y, gesture = None, None
             else:
                 hand_y, gesture = hand.hand_y, hand.gesture
-            activity = hand is not None
+            activity = hand is not None and state != GAME_OVER
             key_pressed = False
             wants_screensaver = False
             flap = False
@@ -316,6 +316,7 @@ def main() -> None:
                     name_buffer = ""
                     input_delay = GAME_OVER_INPUT_DELAY
                     stt_started = False
+                    last_activity = elapsed
 
             elif state == GAME_OVER:
                 if input_delay <= 0 and not stt_started:
