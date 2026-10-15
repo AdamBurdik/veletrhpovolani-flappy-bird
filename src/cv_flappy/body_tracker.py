@@ -75,7 +75,6 @@ class BodyState:
     too_close: bool
     too_far: bool
     bending: bool
-    line_y: float = 0.0
     landmarks: list[tuple[float, float]] = field(default_factory=list)
     visibility: list[float] = field(default_factory=list)
 
@@ -212,7 +211,6 @@ class BodyTracker:
             too_close=too_close,
             too_far=too_far,
             bending=bending,
-            line_y=shoulder_mid_y,
             landmarks=landmarks,
             visibility=visibility,
         )
