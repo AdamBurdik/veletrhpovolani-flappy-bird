@@ -1,8 +1,31 @@
+> [!NOTE]
+> This project was written entirely by AI. Please read the LICENCE before.
+
 # cv-flappy
 
 Flappy Bird played with your hand over a web camera. The bird's height follows
 your hand's height in the camera frame. After a game over you say your name and
 your score is saved to a local JSON leaderboard.
+
+## Licence
+
+The **source code** is licensed under the [MIT License](LICENCE).
+
+This covers the code only:
+
+- `src/`
+- `scripts/`
+
+It does **not** cover the models and assets:
+
+- `assets/`
+- `models/`
+- `hand_landmarker.task`
+- `pose_landmarker_lite.task`
+
+These files may come from third parties and may have their own licences.
+Their origin has not been verified.
+If you want to reuse or redistribute them, please do your own research.
 
 ## Requirements
 
