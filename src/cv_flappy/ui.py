@@ -39,6 +39,7 @@ from .config import (
     LB_MIN_W,
     LB_W_FRAC,
     MARGIN,
+    MENU_PINCH_SECONDS,
     ORANGE,
     PANEL_BORDER,
     PIPE_CAP_H,
@@ -537,6 +538,7 @@ def draw_menu(
     selected: str,
     layout: Layout,
     frame=None,
+    elapsed: float = 0.0,
 ) -> None:
     sw, sh = surface.get_size()
     pf = layout.pf_rect
@@ -555,23 +557,34 @@ def draw_menu(
         "easy": pf.top + pf.height * 0.40,
         "hard": pf.top + pf.height * 0.56,
     }
+    option_rect = None
     for difficulty in DIFFICULTIES:
         is_selected = difficulty == selected
         color = GREEN if difficulty == "easy" else RED
         text = f"[{1 if difficulty == 'easy' else 2}]  {difficulty.upper()}"
         y = option_zone_y[difficulty]
         if is_selected:
-            draw_text(surface, "> " + text, 36, (pf.centerx, y), color,
-                      align="center", shadow=True)
+            option_rect = draw_text(
+                surface, "> " + text, 36, (pf.centerx, y), color,
+                align="center", shadow=True,
+            )
         else:
             draw_text(surface, text, 28, (pf.centerx, y), GRAY,
                       align="center")
+
+    if camera_ok and option_rect is not None:
+        draw_pinch_hint(
+            surface,
+            (option_rect.right + int(pf.width * 0.06), option_rect.centery),
+            layout.scale,
+            elapsed,
+        )
 
     if camera_ok:
         controls = (
             "Bird follows your hand"
             if selected == "easy"
-            else "Pipes follow your hand - close fist / pinch to flap"
+            else "Pipes follow your hand - pinch to flap"
         )
         draw_text(
             surface, controls, 24,
@@ -751,12 +764,12 @@ def draw_game_over(
             status = "Listening... speak now"
             status_color = GREEN
         else:
-            status = "Press BACKSPACE to say again"
+            status = "Press R to say again"
             status_color = GRAY
         draw_text(surface, status, 22, (box.centerx, box.top + 292),
                   status_color, align="center")
         draw_text(
-            surface, "ENTER = save    BACKSPACE = say again    ESC = skip",
+            surface, "ENTER = save    R = say again    ESC = skip",
             20, (box.centerx, box.top + 326), GRAY, align="center",
         )
     else:
@@ -859,3 +872,27 @@ def draw_wake_cue(
         align="center", shadow=True,
     )
 
+
+def draw_pinch_hint(
+    surface: pygame.Surface,
+    center: tuple[int, int],
+    scale: float,
+    elapsed: float,
+) -> None:
+    """Loop the hand-closing animation as a hint that pinching confirms."""
+    frames = _intro_frames()
+    if not frames:
+        return
+    phase = (elapsed / MENU_PINCH_SECONDS) % 1.0
+    index = int(phase * len(frames)) % len(frames)
+    size = (
+        max(1, int(INTRO_FRAME_W * scale * 0.38)),
+        max(1, int(INTRO_FRAME_H * scale * 0.38)),
+    )
+    image = pygame.transform.smoothscale(frames[index], size)
+    rect = image.get_rect(center=center)
+    surface.blit(image, rect)
+    draw_text(
+        surface, "pinch to confirm", 18, (rect.right + 10, rect.centery),
+        WHITE, align="midleft", shadow=True,
+    )

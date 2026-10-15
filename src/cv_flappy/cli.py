@@ -226,6 +226,8 @@ def main() -> None:
 
                 elif state == GAME_OVER and input_delay <= 0:
                     if event.key == pygame.K_BACKSPACE:
+                        name_buffer = name_buffer[:-1]
+                    elif event.key == pygame.K_r:
                         name_buffer = ""
                         listener.start()
                         stt_started = True
@@ -376,7 +378,7 @@ def main() -> None:
             layout = ui.compute_layout(*screen.get_size())
 
             if state == MENU:
-                ui.draw_menu(screen, camera.ok, selected, layout, frame)
+                ui.draw_menu(screen, camera.ok, selected, layout, frame, elapsed)
             else:
                 ui.draw_playfield(screen, game, layout, elapsed, frame)
                 if state == INTRO:

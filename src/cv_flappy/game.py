@@ -13,12 +13,16 @@ from .config import (
     PIPE_FOLLOW_SMOOTHING,
     PIPE_GAP,
     PIPE_GAP_MARGIN,
+    PIPE_HARD_Y_RANDOM,
+    PIPE_HARD_Y_RANDOM_LATE_PER_POINT,
+    PIPE_HARD_Y_RANDOM_MAX,
+    PIPE_LATE_SCORE,
+    PIPE_LATE_SPEEDUP_PER_POINT,
     PIPE_SPEED,
     PIPE_SPEEDUP_PER_POINT,
     PIPE_SPEED_MAX,
     PIPE_SPACING,
     PIPE_WIDTH,
-    PIPE_HARD_Y_RANDOM,
     PLAYFIELD_MAP_MARGIN,
     VIRTUAL_PLAYFIELD_H,
     VIRTUAL_PLAYFIELD_W,
@@ -107,9 +111,7 @@ class FlappyGame:
 
     def _update_pipes(self, dt: float, hand_y: float | None) -> None:
         bird = self.bird
-        self.pipe_speed = min(
-            PIPE_SPEED + self.score * PIPE_SPEEDUP_PER_POINT, PIPE_SPEED_MAX
-        )
+        self.pipe_speed = self._speed()
         target_gap = None
         if self.difficulty == "hard" and hand_y is not None:
             target_gap = map_hand_to_playfield(hand_y, GAP_MIN, GAP_MAX)
@@ -127,10 +129,21 @@ class FlappyGame:
         if not self.pipes or self.pipes[-1].x < VIRTUAL_PLAYFIELD_W - PIPE_SPACING:
             self._spawn_pipe()
 
+    def _speed(self) -> float:
+        early = min(self.score, PIPE_LATE_SCORE) * PIPE_SPEEDUP_PER_POINT
+        late = max(0, self.score - PIPE_LATE_SCORE) * PIPE_LATE_SPEEDUP_PER_POINT
+        return min(PIPE_SPEED + early + late, PIPE_SPEED_MAX)
+
+    def _follow_amplitude(self) -> float:
+        late = (
+            max(0, self.score - PIPE_LATE_SCORE) * PIPE_HARD_Y_RANDOM_LATE_PER_POINT
+        )
+        return min(PIPE_HARD_Y_RANDOM + late, PIPE_HARD_Y_RANDOM_MAX)
+
     def _spawn_pipe(self, x: float | None = None) -> None:
         gap_y = random.uniform(GAP_MIN, GAP_MAX)
         follow_offset = (
-            random.uniform(-PIPE_HARD_Y_RANDOM, PIPE_HARD_Y_RANDOM)
+            random.uniform(-self._follow_amplitude(), self._follow_amplitude())
             if self.difficulty == "hard"
             else 0.0
         )
