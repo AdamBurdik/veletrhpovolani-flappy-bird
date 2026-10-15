@@ -47,20 +47,22 @@ class HandState:
 
 
 def map_hand_to_playfield(
-    hand_y: float, top: float, bottom: float
+    hand_y: float, top: float, bottom: float, low: float = HAND_MAP_LOW, high: float = HAND_MAP_HIGH
 ) -> float:
-    t = (hand_y - HAND_MAP_LOW) / (HAND_MAP_HIGH - HAND_MAP_LOW)
+    t = (hand_y - low) / (high - low)
     t = min(1.0, max(0.0, t))
     return top + t * (bottom - top)
 
 
-def playfield_to_hand(y: float, top: float, bottom: float) -> float:
+def playfield_to_hand(
+    y: float, top: float, bottom: float, low: float = HAND_MAP_LOW, high: float = HAND_MAP_HIGH
+) -> float:
     """Inverse of map_hand_to_playfield: a playfield height -> hand_y."""
     if bottom <= top:
-        return HAND_MAP_LOW
+        return low
     t = (y - top) / (bottom - top)
     t = min(1.0, max(0.0, t))
-    return HAND_MAP_LOW + t * (HAND_MAP_HIGH - HAND_MAP_LOW)
+    return low + t * (high - low)
 
 
 def _dist(a, b) -> float:
@@ -108,15 +110,15 @@ def detect_gesture(landmarks) -> str | None:
     return None
 
 
-def ensure_model(path, url: str) -> None:
+def ensure_model(path, url: str, label: str = "landmark model") -> None:
     if path.exists():
         return
-    print(f"Downloading hand landmark model to {path} ...")
+    print(f"Downloading {label} to {path} ...")
     try:
         urllib.request.urlretrieve(url, path)
     except OSError as exc:
         raise RuntimeError(
-            f"Could not download the hand landmark model from {url}. "
+            f"Could not download the {label} from {url}. "
             f"Download it manually and place it at {path}."
         ) from exc
 
@@ -128,7 +130,7 @@ class HandTracker:
         model_path=HAND_LANDMARKER_PATH,
         model_url: str = HAND_LANDMARKER_URL,
     ):
-        ensure_model(model_path, model_url)
+        ensure_model(model_path, model_url, "hand landmark model")
         options = vision.HandLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=str(model_path)),
             running_mode=vision.RunningMode.VIDEO,

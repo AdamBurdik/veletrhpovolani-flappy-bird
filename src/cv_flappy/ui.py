@@ -46,10 +46,13 @@ from .config import (
     PIPE_LIGHT,
     PIPE_WIDTH,
     PLAYFIELD_MAP_MARGIN,
+    POSE_OK_COLOR,
+    POSE_WARN_COLOR,
     RED,
     SILVER,
     SKY_BOTTOM,
     SKY_TOP,
+    SQUAT_COLOR,
     SUN,
     SUN_HALO,
     TOP_N_PER_BOARD,
@@ -62,6 +65,7 @@ from .config import (
     GROUND_Y,
 )
 from .leaderboard import DIFFICULTIES
+from .body_tracker import BODY_CONNECTIONS, BodyState
 from .hand_tracker import HAND_CONNECTIONS, HandState, map_hand_to_playfield
 
 _font_cache: dict[int, pygame.font.Font] = {}
@@ -373,7 +377,12 @@ def _draw_score(surface: pygame.Surface, game, layout: Layout) -> None:
 
 
 def draw_camera_panel(
-    surface: pygame.Surface, frame, hand: HandState | None, layout: Layout
+    surface: pygame.Surface,
+    frame,
+    hand: HandState | None,
+    layout: Layout,
+    body: BodyState | None = None,
+    squat: bool = False,
 ) -> None:
     rect = layout.cam_rect
     if frame is not None:
@@ -383,7 +392,14 @@ def draw_camera_panel(
             ),
             rect,
         )
-        if hand is not None:
+        if squat:
+            if body is not None:
+                line_y = rect.top + int(body.body_y * rect.height)
+                pygame.draw.line(
+                    surface, SQUAT_COLOR, (rect.left, line_y), (rect.right, line_y), 2
+                )
+                _draw_body_overlay(surface, rect, body)
+        elif hand is not None:
             line_y = rect.top + int(hand.hand_y * rect.height)
             pygame.draw.line(
                 surface, GREEN, (rect.left, line_y), (rect.right, line_y), 2
@@ -393,6 +409,27 @@ def draw_camera_panel(
         pygame.draw.rect(surface, GRAY, rect)
         draw_text(surface, "NO CAMERA", 22, rect.center, WHITE, align="center")
     pygame.draw.rect(surface, PANEL_BORDER, rect, 2)
+
+
+def _draw_body_overlay(
+    surface: pygame.Surface, rect: pygame.Rect, body: BodyState
+) -> None:
+    color = POSE_OK_COLOR if body.valid else POSE_WARN_COLOR
+    points = [
+        (rect.left + int(x * rect.width), rect.top + int(y * rect.height))
+        for x, y in body.landmarks
+    ]
+
+    clip = surface.get_clip()
+    surface.set_clip(rect)
+    for a, b in BODY_CONNECTIONS:
+        if a < len(points) and b < len(points):
+            pygame.draw.line(surface, color, points[a], points[b], LANDMARK_LINE_WIDTH)
+    for index, point in enumerate(points):
+        visibility = body.visibility[index] if index < len(body.visibility) else 1.0
+        dot = color if visibility >= 0.5 else GRAY
+        pygame.draw.circle(surface, dot, point, LANDMARK_RADIUS)
+    surface.set_clip(clip)
 
 
 def _draw_hand_overlay(
@@ -426,15 +463,57 @@ def _draw_hand_overlay(
 
 
 def draw_hand_status(
-    surface: pygame.Surface, hand_y: float | None, layout: Layout
+    surface: pygame.Surface,
+    hand_y: float | None,
+    layout: Layout,
+    body: BodyState | None = None,
+    squat: bool = False,
 ) -> None:
     rect = layout.cam_rect
-    color = GREEN if hand_y is not None else RED
-    text = "HAND OK" if hand_y is not None else "NO HAND"
+    if squat:
+        if body is None:
+            color, text = RED, "NO BODY"
+        elif body.too_close:
+            color, text = RED, "STEP BACK"
+        elif body.too_far:
+            color, text = RED, "MOVE CLOSER"
+        elif body.bending:
+            color, text = RED, "DON'T BEND - SQUAT"
+        elif body.valid:
+            color, text = GREEN, "BODY OK"
+        else:
+            color, text = RED, "SHOW YOUR BODY"
+    else:
+        color = GREEN if hand_y is not None else RED
+        text = "HAND OK" if hand_y is not None else "NO HAND"
     dot = pygame.Rect(rect.left + 2, rect.bottom + 8, 10, 10)
     dot.centery = rect.bottom + 14
     pygame.draw.circle(surface, color, dot.center, 5)
     draw_text(surface, text, 20, (rect.left + 16, rect.bottom + 5), color)
+
+
+def draw_squat_warning(
+    surface: pygame.Surface, body: BodyState | None, layout: Layout
+) -> None:
+    if body is None:
+        return
+    if body.too_close:
+        message = "STEP BACK"
+    elif body.too_far:
+        message = "MOVE CLOSER"
+    elif body.bending:
+        message = "USE YOUR LEGS - DON'T BEND"
+    else:
+        return
+    pf = layout.pf_rect
+    band = pygame.Rect(pf.left, pf.top, pf.width, 64)
+    overlay = pygame.Surface(band.size, pygame.SRCALPHA)
+    overlay.fill((180, 20, 20, 160))
+    surface.blit(overlay, band)
+    draw_text(
+        surface, message, 38, (band.centerx, band.centery), WHITE,
+        align="center", shadow=True,
+    )
 
 
 def draw_menu_prompt(
@@ -483,15 +562,17 @@ def draw_leaderboard(
     footer_h = 40
     section_title_h = 30
     row_h = 28
-    usable = rect.height - 56 - footer_h - 2 * section_title_h
-    rows_fit = max(1, min(TOP_N_PER_BOARD, usable // (2 * row_h)))
+    sections = max(1, len(DIFFICULTIES))
+    usable = rect.height - 56 - footer_h - sections * section_title_h
+    rows_fit = max(1, min(TOP_N_PER_BOARD, usable // (sections * row_h)))
 
     y = rect.top + 58
-    for difficulty in DIFFICULTIES:
-        color = RED if difficulty == "hard" else GREEN
+    mode_colors = {"easy": GREEN, "hard": RED, "squat": SQUAT_COLOR}
+    for index, difficulty in enumerate(DIFFICULTIES, start=1):
+        color = mode_colors.get(difficulty, WHITE)
         draw_text(
             surface,
-            f"{difficulty.upper()}  (1)" if difficulty == "easy" else f"{difficulty.upper()}  (2)",
+            f"{difficulty.upper()}  ({index})",
             20,
             (rect.centerx, y),
             color,
@@ -504,6 +585,7 @@ def draw_leaderboard(
                 surface, "No scores yet", 20, (rect.centerx, y + 10), GRAY,
                 align="center",
             )
+            y += row_h
         else:
             for i, entry in enumerate(board[:rows_fit]):
                 row_color = MEDALS[i] if i < len(MEDALS) else WHITE
@@ -539,6 +621,7 @@ def draw_menu(
     layout: Layout,
     frame=None,
     elapsed: float = 0.0,
+    squat_available: bool = True,
 ) -> None:
     sw, sh = surface.get_size()
     pf = layout.pf_rect
@@ -554,14 +637,19 @@ def draw_menu(
     )
 
     option_zone_y = {
-        "easy": pf.top + pf.height * 0.40,
-        "hard": pf.top + pf.height * 0.56,
+        "easy": pf.top + pf.height * 0.28,
+        "hard": pf.top + pf.height * 0.39,
+        "squat": pf.top + pf.height * 0.50,
     }
+    option_colors = {"easy": GREEN, "hard": RED, "squat": SQUAT_COLOR}
     option_rect = None
-    for difficulty in DIFFICULTIES:
+    for index, difficulty in enumerate(DIFFICULTIES, start=1):
         is_selected = difficulty == selected
-        color = GREEN if difficulty == "easy" else RED
-        text = f"[{1 if difficulty == 'easy' else 2}]  {difficulty.upper()}"
+        color = option_colors.get(difficulty, WHITE)
+        label = difficulty.upper()
+        if difficulty == "squat" and not squat_available:
+            label += "  (unavailable)"
+        text = f"[{index}]  {label}"
         y = option_zone_y[difficulty]
         if is_selected:
             option_rect = draw_text(
@@ -581,26 +669,31 @@ def draw_menu(
         )
 
     if camera_ok:
-        controls = (
-            "Bird follows your hand"
-            if selected == "easy"
-            else "Pipes follow your hand - pinch to flap"
-        )
+        if selected == "squat" and not squat_available:
+            controls = "Squat mode unavailable - pose model not found"
+        elif selected == "easy":
+            controls = "Bird follows your hand"
+        elif selected == "hard":
+            controls = "Pipes follow your hand - pinch to flap"
+        else:
+            controls = "Stand tall = up, squat down = down"
         draw_text(
             surface, controls, 24,
-            (pf.centerx, pf.centery + 90), WHITE, align="center", shadow=True,
+            (pf.centerx, pf.top + pf.height * 0.62), WHITE, align="center",
+            shadow=True,
         )
     else:
         draw_text(
             surface, "No camera detected - SPACE to start anyway", 28,
-            (pf.centerx, pf.centery + 90), RED, align="center", shadow=True,
+            (pf.centerx, pf.top + pf.height * 0.62), RED, align="center",
+            shadow=True,
         )
     draw_text(
         surface, "Hover hand over a mode to choose, close fist / pinch to start", 22,
         (pf.centerx, pf.bottom - 96), WHITE, align="center", shadow=True,
     )
     draw_text(
-        surface, "1 / 2 = difficulty (keyboard)", 20,
+        surface, "1 / 2 / 3 = difficulty (keyboard)", 20,
         (pf.centerx, pf.bottom - 64), GRAY, align="center",
     )
 
@@ -610,7 +703,7 @@ def draw_intro(
     difficulty: str,
     frame_index: int,
     layout: Layout,
-    hand_ok: bool,
+    signal_ok: bool,
     elapsed: float,
     ready: bool = True,
 ) -> None:
@@ -620,16 +713,24 @@ def draw_intro(
     surface.blit(overlay, pf)
 
     is_hard = difficulty == "hard"
+    is_squat = difficulty == "squat"
+    if is_squat:
+        title, title_color = "SQUAT MODE", SQUAT_COLOR
+    elif is_hard:
+        title, title_color = "HARD MODE", GOLD
+    else:
+        title, title_color = "EASY MODE", GREEN
     draw_text(
-        surface, "HARD MODE" if is_hard else "EASY MODE", 44,
-        (pf.centerx, pf.top + int(pf.height * 0.15)),
-        GOLD if is_hard else GREEN, align="center", shadow=True,
+        surface, title, 44, (pf.centerx, pf.top + int(pf.height * 0.15)),
+        title_color, align="center", shadow=True,
     )
 
     center_y = pf.top + int(pf.height * 0.46)
     size = (max(1, int(INTRO_FRAME_W * s)), max(1, int(INTRO_FRAME_H * s)))
     frames = _intro_frames()
-    if frames:
+    if is_squat:
+        _draw_squat_figure(surface, layout, (pf.centerx, center_y), elapsed)
+    elif frames:
         if is_hard:
             frame = frames[frame_index % len(frames)]
             image_y = center_y
@@ -647,36 +748,92 @@ def draw_intro(
         )
 
     instruction_y = pf.top + int(pf.height * 0.76)
+    if is_squat:
+        instruction = "Stand tall = up, squat down = down"
+    elif is_hard:
+        instruction = "Close fist to flap"
+    else:
+        instruction = "Move your hand up / down"
     draw_text(
-        surface,
-        "Close fist to flap" if is_hard else "Move your hand up / down",
-        32,
-        (pf.centerx, instruction_y),
-        WHITE,
-        align="center",
-        shadow=True,
+        surface, instruction, 32, (pf.centerx, instruction_y),
+        WHITE, align="center", shadow=True,
     )
-    if hand_ok:
+    if signal_ok:
         blink = int(elapsed * 2) % 2 == 0
         if not ready:
             color = GRAY
         else:
             color = GREEN if blink else WHITE
+        if is_squat:
+            start_cue = "Squat up / down to start"
+        elif is_hard:
+            start_cue = "Close fist to start"
+        else:
+            start_cue = "Move hand up / down to start"
         draw_text(
-            surface, "Close fist to start" if is_hard else "Move hand up / down to start", 26,
+            surface, start_cue, 26,
             (pf.centerx, instruction_y + 44), color,
             align="center", shadow=True,
         )
     else:
+        if is_squat:
+            wait_cue = "Step back so your whole body is visible"
+        elif is_hard:
+            wait_cue = "Show your hand, then close a fist"
+        else:
+            wait_cue = "Show your hand, then move it up / down"
         draw_text(
-            surface,
-            "Show your hand, then close a fist" if is_hard else "Show your hand, then move it up / down",
-            26,
+            surface, wait_cue, 26,
             (pf.centerx, instruction_y + 44), RED, align="center", shadow=True,
         )
     draw_text(
         surface, "SPACE / ENTER = start", 22, (pf.centerx, pf.bottom - 38),
         GRAY, align="center",
+    )
+
+
+def _draw_squat_figure(
+    surface: pygame.Surface,
+    layout: Layout,
+    center: tuple[int, int],
+    elapsed: float,
+) -> None:
+    pf, s = layout.pf_rect, layout.scale
+    cx, cy = center
+    amp = pf.height * 0.07
+    y = cy - math.sin(elapsed * 2.4) * amp
+    half = max(2, int(3 * s))
+    color = SQUAT_COLOR
+
+    head = (int(cx), int(y - 44 * s))
+    neck = (int(cx), int(y - 28 * s))
+    hip = (int(cx), int(y + 2 * s))
+    pygame.draw.circle(surface, color, head, max(6, int(13 * s)))
+    pygame.draw.line(surface, color, neck, hip, half)
+
+    arm_dy = int(20 * s)
+    arm_dx = int(24 * s)
+    pygame.draw.line(surface, color, neck, (int(cx - arm_dx), int(y - 4 * s)), half)
+    pygame.draw.line(surface, color, neck, (int(cx + arm_dx), int(y - 4 * s)), half)
+
+    t = (math.sin(elapsed * 2.4) + 1.0) / 2.0
+    knee_dx = int((10 + 16 * t) * s)
+    knee_y = int(y + (30 - 6 * t) * s)
+    foot_y = int(y + (58 - 12 * t) * s)
+    for sign in (-1, 1):
+        knee = (int(cx + sign * knee_dx), knee_y)
+        foot = (int(cx + sign * knee_dx), foot_y)
+        pygame.draw.line(surface, color, hip, knee, half)
+        pygame.draw.line(surface, color, knee, foot, half)
+
+    label_x = int(cx + 52 * s)
+    draw_text(
+        surface, "Stand tall", 20, (label_x, int(cy - amp)), WHITE,
+        align="midleft", shadow=True,
+    )
+    draw_text(
+        surface, "Squat", 20, (label_x, int(cy + amp)), WHITE,
+        align="midleft", shadow=True,
     )
 
 

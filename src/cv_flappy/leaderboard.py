@@ -3,7 +3,7 @@ from datetime import date
 
 from .config import LEADERBOARD_PATH, MAX_LEADERBOARD_ENTRIES
 
-DIFFICULTIES = ("easy", "hard")
+DIFFICULTIES = ("easy", "hard", "squat")
 
 
 def _read() -> dict:

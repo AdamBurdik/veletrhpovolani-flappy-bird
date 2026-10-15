@@ -18,7 +18,9 @@ uv sync
 ```
 
 The hand landmark model (`hand_landmarker.task`, ~8 MB) is downloaded
-automatically to the run directory on first start if not present.
+automatically to the run directory on first start if not present. The pose
+model used by squat mode (`pose_landmarker_lite.task`, ~5 MB) is downloaded the
+same way.
 
 Voice name entry calls a speech-to-text API. Put your key in a `.env` file in
 the run directory, or export it:
@@ -35,9 +37,10 @@ uv run cv-flappy
 
 ## How to play
 
-1. **Menu** — hover your hand over the upper half for **easy** or the lower
-   half for **hard** (highlighted live), then **close your fist or pinch** to
-   start. Keyboard works too: 1 / 2 to choose, SPACE to start.
+1. **Menu** — hover your hand over a third of the screen to pick **easy**
+   (top), **hard** (middle) or **squat** (bottom) (highlighted live), then
+   **close your fist or pinch** to start. Keyboard works too: 1 / 2 / 3 to
+   choose, SPACE to start.
 2. **Easy** — an intro screen shows a hand moving up and down and waits for you
    to **move your hand up and down** before the countdown starts (SPACE / ENTER
    also work). Then raise or lower your open hand and the bird follows its
@@ -46,7 +49,16 @@ uv run cv-flappy
    you to **close your fist** before the countdown starts (SPACE / ENTER also
    work). Then the pipe gaps follow your hand's height (highly sensitive); the
    bird falls with gravity and you flap by closing your fist or pinching.
-4. Pipes get faster as you score. Game over: the game starts listening and you
+4. **Squat** — the bird's height follows your **torso**: stand tall and it rises,
+   squat down and it drops. The intro waits for you to **squat up and down**
+   before the countdown starts. Your whole body is tracked with MediaPipe Pose
+   (the pose model is downloaded automatically like the hand model), and the
+   height is driven by your **hips**, so bending over at the waist does nothing.
+   If you lean/bend instead of squatting, or crowd the camera, the bird freezes
+   and a **STEP BACK** / **USE YOUR LEGS - DON'T BEND** warning appears until
+   you get back into range. Squat mode is skipped if the pose model can't be
+   loaded (e.g. offline on first run).
+5. Pipes get faster as you score. Game over: the game starts listening and you
    **say your name** (Czech). Press ENTER to save it, BACKSPACE to clear it and
    listen again, or ESC to skip. Typing on the keyboard still works as a
    fallback. Either way you go straight back to the menu after saving/skipping.
@@ -74,7 +86,8 @@ run directory if present; that file is git-ignored.
 
 The intro screen is shown for at least 2 seconds before it can be dismissed,
 so the same pinch/fist that picked the mode can't skip it; in easy mode you
-must then actually move your hand up and down.
+must then actually move your hand up and down, and in squat mode you must
+squat up and down.
 
 Gesture detection is tuned for poor light: the pinch measure is normalised by
 the hand's own size and averaged over several finger joints, gestures are
@@ -102,11 +115,13 @@ The window is resizable (drag its edges) and **F11** toggles fullscreen.
 Sound effects play when you flap (hard mode), score a point, and crash.
 Missing assets or an unavailable audio device simply disable sound without
 affecting the game.
-The leaderboard panel on the right is always visible with separate **EASY**
-and **HARD** boards (top 5 each); the camera preview sits on the left with a
-live line showing your hand height. On top of the preview the tracked hand is
-drawn as a skeleton with joint dots, recoloured by gesture (green = neutral,
-gold = pinch, red = fist) so you can see exactly what the tracker sees.
+The leaderboard panel on the right is always visible with separate **EASY**,
+**HARD** and **SQUAT** boards (top 5 each); the camera preview sits on the left
+with a live line showing your hand (or torso in squat mode) height. On top of the
+preview the tracked body is drawn as a skeleton with joint dots, recoloured by
+gesture (green = neutral, gold = pinch, red = fist) for hands, or by validity
+(green = good posture, red = out of range / bending) for the squat pose, so you
+can see exactly what the tracker sees.
 
 ### Wayland / Hyprland note
 
@@ -121,5 +136,5 @@ The game logic runs on a fixed 960x640 virtual playfield scaled to fit the
 window, so gameplay is identical at any resolution.
 
 The leaderboard is stored as `leaderboard.json` in the directory the game is
-run from (`{"easy": [...], "hard": [...]}`, top 50 entries per board, newest
-date included).
+run from (`{"easy": [...], "hard": [...], "squat": [...]}`, top 50 entries per
+board, newest date included).

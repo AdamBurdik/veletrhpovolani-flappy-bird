@@ -8,6 +8,8 @@ from .config import (
     FPS,
     GRAVITY,
     GROUND_Y,
+    HAND_MAP_HIGH,
+    HAND_MAP_LOW,
     HAND_SMOOTHING,
     MAX_FALL_SPEED,
     PIPE_FOLLOW_SMOOTHING,
@@ -24,6 +26,9 @@ from .config import (
     PIPE_SPACING,
     PIPE_WIDTH,
     PLAYFIELD_MAP_MARGIN,
+    SQUAT_MAP_HIGH,
+    SQUAT_MAP_LOW,
+    SQUAT_SMOOTHING,
     VIRTUAL_PLAYFIELD_H,
     VIRTUAL_PLAYFIELD_W,
 )
@@ -97,13 +102,21 @@ class FlappyGame:
                 bird.vy = FLAP_STRENGTH
             bird.y += bird.vy * dt
         elif hand_y is not None:
+            if self.difficulty == "squat":
+                low, high = SQUAT_MAP_LOW, SQUAT_MAP_HIGH
+                smoothing = SQUAT_SMOOTHING
+            else:
+                low, high = HAND_MAP_LOW, HAND_MAP_HIGH
+                smoothing = HAND_SMOOTHING
             target_y = map_hand_to_playfield(
                 hand_y,
                 float(PLAYFIELD_MAP_MARGIN),
                 float(GROUND_Y - PLAYFIELD_MAP_MARGIN),
+                low,
+                high,
             )
             previous_y = bird.y
-            bird.y = blend(bird.y, target_y, HAND_SMOOTHING, dt)
+            bird.y = blend(bird.y, target_y, smoothing, dt)
             bird.vy = (bird.y - previous_y) / dt if dt > 0 else 0.0
         else:
             bird.vy = 0.0

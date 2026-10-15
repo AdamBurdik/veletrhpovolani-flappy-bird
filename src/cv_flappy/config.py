@@ -90,6 +90,16 @@ HAND_MAP_HIGH = 0.85
 MENU_SELECT_FRAMES = 10
 MENU_PINCH_SECONDS = 1.2
 
+SQUAT_MAP_LOW = 0.42
+SQUAT_MAP_HIGH = 0.86
+SQUAT_SMOOTHING = 0.35
+SQUAT_MIN_LANDMARK_VISIBILITY = 0.5
+SQUAT_MAX_SHOULDER_W = 0.42
+SQUAT_MIN_SHOULDER_W = 0.10
+SQUAT_TORSO_MIN_RATIO = 0.85
+SQUAT_HEAD_GAP_MIN_RATIO = 0.30
+SQUAT_INTRO_SWING = 0.15
+
 COUNTDOWN_SECONDS = 3
 GAME_OVER_INPUT_DELAY = 0.5
 
@@ -142,6 +152,14 @@ HAND_LANDMARKER_URL = (
     "https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
     "hand_landmarker/float16/1/hand_landmarker.task"
 )
+POSE_LANDMARKER_PATH = Path.cwd() / "pose_landmarker_lite.task"
+POSE_LANDMARKER_URL = (
+    "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
+    "pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+)
+POSE_DETECTION_CONFIDENCE = 0.5
+POSE_PRESENCE_CONFIDENCE = 0.5
+POSE_TRACKING_CONFIDENCE = 0.5
 MAX_LEADERBOARD_ENTRIES = 50
 TOP_N_PER_BOARD = 5
 MAX_NAME_LENGTH = 12
@@ -204,3 +222,7 @@ HAND_FIST_COLOR = (231, 76, 60)
 HAND_TIP_COLOR = (255, 255, 255)
 LANDMARK_RADIUS = 3
 LANDMARK_LINE_WIDTH = 2
+
+SQUAT_COLOR = (243, 156, 18)
+POSE_OK_COLOR = (111, 196, 69)
+POSE_WARN_COLOR = (231, 76, 60)

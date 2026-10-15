@@ -30,9 +30,11 @@ from .config import (
     SCREENSAVER_WAKE_DELAY,
     SCREENSAVER_WAKE_SWING,
     SCREENSAVER_WOBBLE,
+    SQUAT_INTRO_SWING,
     VIRTUAL_PLAYFIELD_H,
     WINDOW_TITLE,
 )
+from .body_tracker import BodyTracker, BodyWorker
 from .game import FlappyGame, blend
 from .hand_tracker import HandTracker, HandWorker, playfield_to_hand
 from .sound import SoundManager
@@ -80,6 +82,13 @@ def main() -> None:
     camera_worker = CameraWorker(camera)
     tracker = HandTracker()
     worker = HandWorker(tracker)
+    try:
+        body_tracker: BodyTracker | None = BodyTracker()
+        body_worker: BodyWorker | None = BodyWorker(body_tracker)
+    except RuntimeError as exc:
+        print(f"Squat mode disabled: {exc}")
+        body_tracker = None
+        body_worker = None
     game = FlappyGame()
     sfx = SoundManager()
     voice = Speech()
@@ -92,6 +101,8 @@ def main() -> None:
     intro_t = 0.0
     intro_hand_min = 1.0
     intro_hand_max = 0.0
+    intro_body_min = 1.0
+    intro_body_max = 0.0
     name_buffer = ""
     cursor_timer = 0.0
     input_delay = 0.0
@@ -108,6 +119,7 @@ def main() -> None:
     ss_hand_min = 1.0
     ss_hand_max = 0.0
     last_frame = None
+    last_body_frame = None
     entries: dict[str, list[dict]] = {
         difficulty: leaderboard.load(difficulty)
         for difficulty in leaderboard.DIFFICULTIES
@@ -135,6 +147,18 @@ def main() -> None:
                 hand_y, gesture = None, None
             else:
                 hand_y, gesture = hand.hand_y, hand.gesture
+            if (
+                frame is not None
+                and body_worker is not None
+                and selected == "squat"
+                and state != SCREENSAVER
+                and frame is not last_body_frame
+            ):
+                body_worker.submit(frame)
+                last_body_frame = frame
+            body = body_worker.latest() if body_worker is not None else None
+            body_ok = body is not None and body.valid
+            control_y = (body.body_y if body_ok else None) if selected == "squat" else hand_y
             activity = hand is not None and state != GAME_OVER
             key_pressed = False
             wants_screensaver = False
@@ -210,11 +234,25 @@ def main() -> None:
                 elif state == MENU and event.key in (pygame.K_2, pygame.K_KP2):
                     selected = "hard"
 
-                elif state == MENU and wake_grace <= 0 and event.key == pygame.K_SPACE:
+                elif (
+                    state == MENU
+                    and event.key in (pygame.K_3, pygame.K_KP3)
+                    and body_worker is not None
+                ):
+                    selected = "squat"
+
+                elif (
+                    state == MENU
+                    and wake_grace <= 0
+                    and event.key == pygame.K_SPACE
+                    and (selected != "squat" or body_worker is not None)
+                ):
                     game = FlappyGame(selected)
                     intro_t = 0.0
                     intro_hand_min = 1.0
                     intro_hand_max = 0.0
+                    intro_body_min = 1.0
+                    intro_body_max = 0.0
                     state = INTRO
 
                 elif (
@@ -273,20 +311,41 @@ def main() -> None:
             if state == MENU:
                 if hand_y is not None:
                     hand_frames += 1
-                    selected = "easy" if hand_y < 0.5 else "hard"
+                    if hand_y < 1 / 3:
+                        selected = "easy"
+                    elif hand_y < 2 / 3:
+                        selected = "hard"
+                    else:
+                        selected = "squat"
                 else:
                     hand_frames = 0
-                if hand_frames >= MENU_SELECT_FRAMES and confirm and wake_grace <= 0:
+                if (
+                    hand_frames >= MENU_SELECT_FRAMES
+                    and confirm
+                    and wake_grace <= 0
+                    and (selected != "squat" or body_worker is not None)
+                ):
                     game = FlappyGame(selected)
                     intro_t = 0.0
                     intro_hand_min = 1.0
                     intro_hand_max = 0.0
+                    intro_body_min = 1.0
+                    intro_body_max = 0.0
                     state = INTRO
 
             elif state == INTRO:
                 intro_t += dt
                 if game.difficulty == "hard":
                     start_gesture = fist_pressed
+                elif game.difficulty == "squat":
+                    if intro_t >= INTRO_MIN_SECONDS and body_ok:
+                        intro_body_min = min(intro_body_min, body.body_y)
+                        intro_body_max = max(intro_body_max, body.body_y)
+                        start_gesture = (
+                            intro_body_max - intro_body_min >= SQUAT_INTRO_SWING
+                        )
+                    else:
+                        start_gesture = False
                 elif intro_t >= INTRO_MIN_SECONDS and hand_y is not None:
                     intro_hand_min = min(intro_hand_min, hand_y)
                     intro_hand_max = max(intro_hand_max, hand_y)
@@ -307,7 +366,7 @@ def main() -> None:
             elif state == PLAYING:
                 prev_score = game.score
                 was_alive = game.alive
-                game.update(dt, hand_y, flap)
+                game.update(dt, control_y, flap)
                 if game.score > prev_score:
                     sfx.play("point")
                 if was_alive and not game.alive:
@@ -380,16 +439,22 @@ def main() -> None:
             layout = ui.compute_layout(*screen.get_size())
 
             if state == MENU:
-                ui.draw_menu(screen, camera.ok, selected, layout, frame, elapsed)
+                ui.draw_menu(
+                    screen, camera.ok, selected, layout, frame, elapsed,
+                    squat_available=body_worker is not None,
+                )
             else:
                 ui.draw_playfield(screen, game, layout, elapsed, frame)
                 if state == INTRO:
+                    signal_ok = (
+                        body_ok if game.difficulty == "squat" else hand_y is not None
+                    )
                     ui.draw_intro(
                         screen,
                         game.difficulty,
                         int(intro_t * INTRO_FPS),
                         layout,
-                        hand_y is not None,
+                        signal_ok,
                         elapsed,
                         ready=intro_t >= INTRO_MIN_SECONDS,
                     )
@@ -406,9 +471,16 @@ def main() -> None:
                         listener.enabled,
                         layout,
                     )
+                if game.difficulty == "squat" and state == PLAYING:
+                    ui.draw_squat_warning(screen, body, layout)
 
-            ui.draw_camera_panel(screen, frame, hand, layout)
-            ui.draw_hand_status(screen, hand_y, layout)
+            is_squat = selected == "squat"
+            ui.draw_camera_panel(
+                screen, frame, hand, layout, body=body, squat=is_squat
+            )
+            ui.draw_hand_status(
+                screen, hand_y, layout, body=body, squat=is_squat
+            )
             if state == MENU:
                 ui.draw_menu_prompt(screen, camera.ok, hand_frames, layout)
             ui.draw_leaderboard(screen, entries, layout)
@@ -416,8 +488,12 @@ def main() -> None:
             pygame.display.flip()
     finally:
         worker.stop()
+        if body_worker is not None:
+            body_worker.stop()
         camera_worker.stop()
         tracker.close()
+        if body_tracker is not None:
+            body_tracker.close()
         camera.close()
         listener.close()
         pygame.quit()
