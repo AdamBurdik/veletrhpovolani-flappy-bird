@@ -149,6 +149,7 @@ def main() -> None:
             pinch_pressed = gesture == "pinch" and prev_gesture != "pinch"
             confirm = fist_pressed or pinch_pressed
             prev_gesture = gesture
+            typing = state == GAME_OVER and input_delay <= 0
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -168,7 +169,7 @@ def main() -> None:
                 if event.type == pygame.KEYDOWN:
                     activity = True
                     key_pressed = True
-                    if event.key in (pygame.K_0, pygame.K_KP0):
+                    if not typing and event.key in (pygame.K_0, pygame.K_KP0):
                         wants_screensaver = True
                         continue
 
@@ -227,7 +228,7 @@ def main() -> None:
                 elif state == GAME_OVER and input_delay <= 0:
                     if event.key == pygame.K_BACKSPACE:
                         name_buffer = name_buffer[:-1]
-                    elif event.key == pygame.K_r:
+                    elif event.key == pygame.K_TAB:
                         name_buffer = ""
                         listener.start()
                         stt_started = True

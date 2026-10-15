@@ -764,12 +764,12 @@ def draw_game_over(
             status = "Listening... speak now"
             status_color = GREEN
         else:
-            status = "Press R to say again"
+            status = "Press TAB to say again"
             status_color = GRAY
         draw_text(surface, status, 22, (box.centerx, box.top + 292),
                   status_color, align="center")
         draw_text(
-            surface, "ENTER = save    R = say again    ESC = skip",
+            surface, "ENTER = save    TAB = say again    ESC = skip",
             20, (box.centerx, box.top + 326), GRAY, align="center",
         )
     else:

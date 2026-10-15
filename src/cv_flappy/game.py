@@ -17,10 +17,10 @@ from .config import (
     PIPE_HARD_Y_RANDOM_LATE_PER_POINT,
     PIPE_HARD_Y_RANDOM_MAX,
     PIPE_LATE_SCORE,
-    PIPE_LATE_SPEEDUP_PER_POINT,
     PIPE_SPEED,
-    PIPE_SPEEDUP_PER_POINT,
-    PIPE_SPEED_MAX,
+    PIPE_SPEED_MAX_MULT,
+    PIPE_SPEED_START_SCORE,
+    PIPE_SPEED_STEP,
     PIPE_SPACING,
     PIPE_WIDTH,
     PLAYFIELD_MAP_MARGIN,
@@ -130,9 +130,11 @@ class FlappyGame:
             self._spawn_pipe()
 
     def _speed(self) -> float:
-        early = min(self.score, PIPE_LATE_SCORE) * PIPE_SPEEDUP_PER_POINT
-        late = max(0, self.score - PIPE_LATE_SCORE) * PIPE_LATE_SPEEDUP_PER_POINT
-        return min(PIPE_SPEED + early + late, PIPE_SPEED_MAX)
+        mult = min(
+            1.0 + PIPE_SPEED_STEP * max(0, self.score - PIPE_SPEED_START_SCORE),
+            PIPE_SPEED_MAX_MULT,
+        )
+        return PIPE_SPEED * mult
 
     def _follow_amplitude(self) -> float:
         late = (
