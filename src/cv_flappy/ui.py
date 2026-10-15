@@ -23,12 +23,18 @@ from .config import (
     GRAY,
     GRASS,
     GREEN,
+    HAND_FIST_COLOR,
+    HAND_IDLE_COLOR,
+    HAND_PINCH_COLOR,
+    HAND_TIP_COLOR,
     INPUT_BOX,
     INTRO_COLS,
     INTRO_FRAME_H,
     INTRO_FRAME_W,
     INTRO_ROWS,
     INTRO_SHEET,
+    LANDMARK_LINE_WIDTH,
+    LANDMARK_RADIUS,
     LB_MAX_W,
     LB_MIN_W,
     LB_W_FRAC,
@@ -38,6 +44,7 @@ from .config import (
     PIPE_CAP_H,
     PIPE_LIGHT,
     PIPE_WIDTH,
+    PLAYFIELD_MAP_MARGIN,
     RED,
     SILVER,
     SKY_BOTTOM,
@@ -54,9 +61,7 @@ from .config import (
     GROUND_Y,
 )
 from .leaderboard import DIFFICULTIES
-
-PHASE_ENTRY = "entry"
-PHASE_BOARD = "board"
+from .hand_tracker import HAND_CONNECTIONS, HandState, map_hand_to_playfield
 
 _font_cache: dict[int, pygame.font.Font] = {}
 _sky_cache: dict[tuple[int, int], pygame.Surface] = {}
@@ -98,6 +103,16 @@ def compute_layout(w: int, h: int) -> Layout:
     cam_rect = pygame.Rect(MARGIN, (h - cam_h) // 2, cam_w, cam_h)
     lb_rect = pygame.Rect(w - lb_w, 0, lb_w, h)
     return Layout(pf_rect, scale, cam_rect, lb_rect)
+
+
+def compute_screensaver_layout(w: int, h: int) -> Layout:
+    scale = min(w / VIRTUAL_PLAYFIELD_W, h / VIRTUAL_PLAYFIELD_H)
+    pf_w = int(VIRTUAL_PLAYFIELD_W * scale)
+    pf_h = int(VIRTUAL_PLAYFIELD_H * scale)
+    pf_rect = pygame.Rect(
+        (w - pf_w) // 2, (h - pf_h) // 2, pf_w, pf_h
+    )
+    return Layout(pf_rect, scale, pygame.Rect(0, 0, 0, 0), pygame.Rect(0, 0, 0, 0))
 
 
 def _font(size: int) -> pygame.font.Font:
@@ -176,25 +191,41 @@ def _intro_frames() -> list[pygame.Surface]:
     return _intro_frames_cache
 
 
+def _display_surface(surface: pygame.Surface) -> pygame.Surface:
+    if pygame.display.get_surface() is not None:
+        try:
+            return surface.convert()
+        except pygame.error:
+            return surface
+    return surface
+
+
 def draw_camera_background(
     surface: pygame.Surface, frame, dim: int
 ) -> None:
     sw, sh = surface.get_size()
     fh, fw = frame.shape[:2]
     cover = max(sw / fw, sh / fh)
-    scaled = pygame.transform.smoothscale(
-        frame_to_surface(frame), (int(fw * cover), int(fh * cover))
+    scaled = _display_surface(
+        pygame.transform.smoothscale(
+            frame_to_surface(frame), (int(fw * cover), int(fh * cover))
+        )
     )
     surface.blit(scaled, ((sw - scaled.get_width()) // 2, (sh - scaled.get_height()) // 2))
     surface.blit(_dim(sw, sh, dim), (0, 0))
 
 
 def draw_playfield(
-    surface: pygame.Surface, game, layout: Layout, elapsed: float, frame=None
+    surface: pygame.Surface,
+    game,
+    layout: Layout,
+    elapsed: float,
+    frame=None,
+    dim: int = CAMERA_DIM_PLAY,
 ) -> None:
     pf, s = layout.pf_rect, layout.scale
     if frame is not None:
-        draw_camera_background(surface, frame, CAMERA_DIM_PLAY)
+        draw_camera_background(surface, frame, dim)
     else:
         surface.fill(BG_DARK)
         surface.blit(_sky(pf.width, pf.height), pf)
@@ -341,22 +372,56 @@ def _draw_score(surface: pygame.Surface, game, layout: Layout) -> None:
 
 
 def draw_camera_panel(
-    surface: pygame.Surface, frame, hand_y: float | None, layout: Layout
+    surface: pygame.Surface, frame, hand: HandState | None, layout: Layout
 ) -> None:
     rect = layout.cam_rect
     if frame is not None:
         surface.blit(
-            pygame.transform.smoothscale(frame_to_surface(frame), rect.size), rect
+            _display_surface(
+                pygame.transform.smoothscale(frame_to_surface(frame), rect.size)
+            ),
+            rect,
         )
-        if hand_y is not None:
-            line_y = rect.top + int(hand_y * rect.height)
+        if hand is not None:
+            line_y = rect.top + int(hand.hand_y * rect.height)
             pygame.draw.line(
                 surface, GREEN, (rect.left, line_y), (rect.right, line_y), 2
             )
+            _draw_hand_overlay(surface, rect, hand)
     else:
         pygame.draw.rect(surface, GRAY, rect)
         draw_text(surface, "NO CAMERA", 22, rect.center, WHITE, align="center")
     pygame.draw.rect(surface, PANEL_BORDER, rect, 2)
+
+
+def _draw_hand_overlay(
+    surface: pygame.Surface, rect: pygame.Rect, hand: HandState
+) -> None:
+    if hand.gesture == "pinch":
+        color = HAND_PINCH_COLOR
+    elif hand.gesture == "fist":
+        color = HAND_FIST_COLOR
+    else:
+        color = HAND_IDLE_COLOR
+
+    points = [
+        (rect.left + int(x * rect.width), rect.top + int(y * rect.height))
+        for x, y in hand.landmarks
+    ]
+
+    clip = surface.get_clip()
+    surface.set_clip(rect)
+    for a, b in HAND_CONNECTIONS:
+        if a < len(points) and b < len(points):
+            pygame.draw.line(surface, color, points[a], points[b], LANDMARK_LINE_WIDTH)
+    for point in points:
+        pygame.draw.circle(surface, color, point, LANDMARK_RADIUS)
+    for tip in (4, 8):
+        if tip < len(points):
+            pygame.draw.circle(
+                surface, HAND_TIP_COLOR, points[tip], LANDMARK_RADIUS + 1, 1
+            )
+    surface.set_clip(clip)
 
 
 def draw_hand_status(
@@ -585,14 +650,14 @@ def draw_intro(
         else:
             color = GREEN if blink else WHITE
         draw_text(
-            surface, "Close fist to start" if is_hard else "Pinch to start", 26,
+            surface, "Close fist to start" if is_hard else "Move hand up / down to start", 26,
             (pf.centerx, instruction_y + 44), color,
             align="center", shadow=True,
         )
     else:
         draw_text(
             surface,
-            "Show your hand, then close a fist" if is_hard else "Show your hand, then pinch",
+            "Show your hand, then close a fist" if is_hard else "Show your hand, then move it up / down",
             26,
             (pf.centerx, instruction_y + 44), RED, align="center", shadow=True,
         )
@@ -637,10 +702,11 @@ def draw_countdown(surface: pygame.Surface, number: int, layout: Layout) -> None
 def draw_game_over(
     surface: pygame.Surface,
     game,
-    phase: str,
     name_buffer: str,
     cursor_timer: float,
-    saved: bool,
+    listening: bool,
+    level: float,
+    stt_available: bool,
     layout: Layout,
 ) -> None:
     pf = layout.pf_rect
@@ -667,23 +733,129 @@ def draw_game_over(
         align="center",
     )
 
-    if phase == PHASE_ENTRY:
-        draw_text(surface, "Enter your name (max 12):", 24,
-                  (box.centerx, box.top + 180), WHITE, align="center")
-        input_rect = pygame.Rect(0, 0, 320, 48)
-        input_rect.center = (box.centerx, box.top + 240)
-        pygame.draw.rect(surface, INPUT_BOX, input_rect, border_radius=6)
-        pygame.draw.rect(surface, WHITE, input_rect, 2, border_radius=6)
-        cursor = "_" if int(cursor_timer * 2) % 2 == 0 else " "
-        draw_text(surface, name_buffer + cursor, 30,
-                  (input_rect.left + 14, input_rect.centery), WHITE,
-                  align="midleft")
+    prompt = "Say your name:" if stt_available else "Enter your name (max 12):"
+    draw_text(surface, prompt, 24, (box.centerx, box.top + 180), WHITE,
+              align="center")
+    input_rect = pygame.Rect(0, 0, 320, 48)
+    input_rect.center = (box.centerx, box.top + 240)
+    pygame.draw.rect(surface, INPUT_BOX, input_rect, border_radius=6)
+    pygame.draw.rect(surface, WHITE, input_rect, 2, border_radius=6)
+    cursor = "_" if int(cursor_timer * 2) % 2 == 0 else " "
+    draw_text(surface, name_buffer + cursor, 30,
+              (input_rect.left + 14, input_rect.centery), WHITE,
+              align="midleft")
+
+    if stt_available:
+        if listening:
+            _draw_mic_indicator(surface, input_rect, level, cursor_timer)
+            status = "Listening... speak now"
+            status_color = GREEN
+        else:
+            status = "Press BACKSPACE to say again"
+            status_color = GRAY
+        draw_text(surface, status, 22, (box.centerx, box.top + 292),
+                  status_color, align="center")
+        draw_text(
+            surface, "ENTER = save    BACKSPACE = say again    ESC = skip",
+            20, (box.centerx, box.top + 326), GRAY, align="center",
+        )
+    else:
         draw_text(surface, "ENTER = save    ESC = skip", 22,
                   (box.centerx, box.top + 320), GRAY, align="center")
-    else:
-        message = "Score saved!" if saved else "Skipped"
-        color = GOLD if saved else GRAY
-        draw_text(surface, message, 30, (box.centerx, box.top + 200), color,
-                  align="center")
-        draw_text(surface, "ENTER / pinch = back to menu", 22,
-                  (box.centerx, box.top + 320), GRAY, align="center")
+
+
+def _draw_mic_indicator(
+    surface: pygame.Surface, input_rect: pygame.Rect, level: float, t: float
+) -> None:
+    bar = pygame.Rect(
+        input_rect.left, input_rect.bottom + 8, input_rect.width, 6
+    )
+    pygame.draw.rect(surface, (60, 70, 90), bar, border_radius=3)
+    filled = int(bar.width * min(1.0, max(0.0, level * 8.0)))
+    if filled > 0:
+        pygame.draw.rect(
+            surface, GREEN, (bar.left, bar.top, filled, bar.height),
+            border_radius=3,
+        )
+    pulse = 4 + int(2 * (t * 3 % 1.0))
+    pygame.draw.circle(surface, RED, (input_rect.right + 18, input_rect.centery),
+                       pulse)
+
+
+def draw_ghost_hand(
+    surface: pygame.Surface, layout: Layout, hand_y: float
+) -> None:
+    pf, s = layout.pf_rect, layout.scale
+    target_y = map_hand_to_playfield(
+        hand_y,
+        float(PLAYFIELD_MAP_MARGIN),
+        float(GROUND_Y - PLAYFIELD_MAP_MARGIN),
+    )
+    hx, hy = _vxy(layout, 96.0, target_y)
+    r = max(10, int(20 * s))
+    size = r * 4
+    ghost = pygame.Surface((size, size), pygame.SRCALPHA)
+    cx = cy = size // 2
+    color = (GREEN[0], GREEN[1], GREEN[2], 95)
+    for dx in (-1.35, -0.45, 0.45, 1.35):
+        fx = int(cx + dx * r * 0.72)
+        fh = int(r * (1.6 - abs(dx) * 0.3))
+        fw = max(3, int(r * 0.32))
+        pygame.draw.rect(
+            ghost, color, (fx - fw // 2, cy - r - fh + 4, fw, fh),
+            border_radius=fw // 2,
+        )
+    pygame.draw.circle(ghost, color, (cx, cy), r)
+    pygame.draw.circle(ghost, (*WHITE, 60), (cx, cy), r, 2)
+    clip = surface.get_clip()
+    surface.set_clip(pf)
+    surface.blit(ghost, ghost.get_rect(center=(hx, hy)))
+    surface.set_clip(clip)
+
+
+def draw_demo_banner(
+    surface: pygame.Surface, layout: Layout, elapsed: float
+) -> None:
+    pf = layout.pf_rect
+    band = pygame.Rect(pf.left, pf.top, pf.width, 72)
+    overlay = pygame.Surface(band.size, pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 150))
+    surface.blit(overlay, band)
+    pygame.draw.line(
+        surface, (90, 100, 115), (band.left, band.bottom), (band.right, band.bottom), 2
+    )
+    draw_text(surface, "DEMO", 32, (band.centerx, band.top + 8), GOLD,
+              align="midtop", shadow=True)
+    blink = int(elapsed * 1.6) % 2 == 0
+    draw_text(
+        surface,
+        "Move your hand up / down to play  (or press any key)",
+        22,
+        (band.centerx, band.bottom - 8),
+        WHITE if blink else GRAY,
+        align="midbottom",
+        shadow=True,
+    )
+
+
+def draw_wake_cue(
+    surface: pygame.Surface, layout: Layout, elapsed: float
+) -> None:
+    pf, s = layout.pf_rect, layout.scale
+    center_y = pf.top + int(pf.height * 0.42)
+    size = (
+        max(1, int(INTRO_FRAME_W * s * 0.7)),
+        max(1, int(INTRO_FRAME_H * s * 0.7)),
+    )
+    frames = _intro_frames()
+    if frames:
+        image = pygame.transform.smoothscale(frames[0], size)
+        image_y = center_y + int(math.sin(elapsed * 2.4) * pf.height * 0.09)
+        surface.blit(image, image.get_rect(center=(pf.centerx, image_y)))
+        _draw_move_arrow(surface, layout, size, center_y)
+    draw_text(
+        surface, "Move your hand up / down", 28,
+        (pf.centerx, center_y + int(pf.height * 0.20)), WHITE,
+        align="center", shadow=True,
+    )
+

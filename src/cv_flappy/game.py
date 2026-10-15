@@ -5,6 +5,7 @@ from .config import (
     BIRD_RADIUS,
     BIRD_X,
     FLAP_STRENGTH,
+    FPS,
     GRAVITY,
     GROUND_Y,
     HAND_SMOOTHING,
@@ -26,6 +27,17 @@ from .hand_tracker import map_hand_to_playfield
 
 GAP_MIN = PIPE_GAP / 2 + PIPE_GAP_MARGIN
 GAP_MAX = GROUND_Y - PIPE_GAP / 2 - PIPE_GAP_MARGIN
+
+
+def blend(current: float, target: float, per_frame: float, dt: float) -> float:
+    """Frame-rate independent exponential approach.
+
+    ``per_frame`` is the fraction of the remaining distance closed in a single
+    frame at ``FPS``; applying it with ``dt`` keeps the motion identical whether
+    the loop runs at 30 or 144 fps (and avoids overshoot on a stalled frame).
+    """
+    amount = 1.0 - (1.0 - per_frame) ** (dt * FPS)
+    return current + (target - current) * amount
 
 
 @dataclass
@@ -87,7 +99,7 @@ class FlappyGame:
                 float(GROUND_Y - PLAYFIELD_MAP_MARGIN),
             )
             previous_y = bird.y
-            bird.y += (target_y - bird.y) * HAND_SMOOTHING
+            bird.y = blend(bird.y, target_y, HAND_SMOOTHING, dt)
             bird.vy = (bird.y - previous_y) / dt if dt > 0 else 0.0
         else:
             bird.vy = 0.0
@@ -106,7 +118,7 @@ class FlappyGame:
             if target_gap is not None:
                 desired = target_gap + pipe.follow_offset
                 desired = max(GAP_MIN, min(GAP_MAX, desired))
-                pipe.gap_y += (desired - pipe.gap_y) * PIPE_FOLLOW_SMOOTHING
+                pipe.gap_y = blend(pipe.gap_y, desired, PIPE_FOLLOW_SMOOTHING, dt)
                 pipe.gap_y = max(GAP_MIN, min(GAP_MAX, pipe.gap_y))
             if not pipe.scored and pipe.x + PIPE_WIDTH < bird.x - bird.radius:
                 pipe.scored = True

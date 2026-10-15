@@ -12,3 +12,6 @@ wheels/
 # Downloaded model assets
 *.task
 *.onnx
+
+# Secrets
+.env
